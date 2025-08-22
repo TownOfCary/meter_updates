@@ -17,59 +17,58 @@ from datetime import datetime         # for strptime
 
 pp = pprint.PrettyPrinter(indent=4)
 
+
 bad_data_subdir = 'bad_data/'
 debug_data_subdir = 'debug/'
 output_data_subdir = 'output/'
-
-# Coordinate System
-state_plane_epsg = 2264  # EPSG for NC State Plane
-transformer = Transformer.from_crs("EPSG:4326", "EPSG:2264")  # WGS84 to NC State Plane
-
+naviline_query_file = 'sql/Meter_Query_for_esri.sql'
 
 # Set up arcgis connection
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-#Esri Query Setup
-arcgis_user = config['Credentials']['ARCGIS_USER']
-arcgis_pass = config['Credentials']['ARCGIS_PASSWORD']
+def esri_connection_setup():
+    global meters_feature_server
+    global esri_meter_fields
+    global esri_batch_size
+    
+    #Esri Query Setup
+    arcgis_user = config['Credentials']['ARCGIS_USER']
+    arcgis_pass = config['Credentials']['ARCGIS_PASSWORD']
 
-meters_feature_server = "https://maps-apis.carync.gov/server/rest/services/Infrastructure/MetersInternal/FeatureServer/0" # service url
-arcpy.SignInToPortal("https://maps.carync.gov/portal/", arcgis_user, arcgis_pass)
-fields = [f.name for f in arcpy.ListFields(meters_feature_server)]
-fields.remove("GlobalID")
-batch_size = 100  # Process 100 elements at a time
-# print(fields)
+    meters_feature_server = "https://maps-apis.carync.gov/server/rest/services/Infrastructure/MetersInternal/FeatureServer/0" # service url
+    arcpy.SignInToPortal("https://maps.carync.gov/portal/", arcgis_user, arcgis_pass)
+    esri_meter_fields = [f.name for f in arcpy.ListFields(meters_feature_server)]
+    esri_meter_fields.remove("GlobalID")
+    esri_batch_size = 100  # Process 100 elements at a time
 
-#Naviline Query Setup
-naviline_user = config['Credentials']['NAVILINE_USER']
-naviline_pass = config['Credentials']['NAVILINE_PASSWORD']
-os.environ['JAVA_HOME'] = config['Java']['SCRIPT_JAVA_HOME']
-naviline_query_file = 'sql/Meter_Query_for_esri.sql'
-DB_HOST = "cary.aspgov.com"             # e.g., myibmhost.example.com
-DB_NAME = "HTEDTA"
-JDBC_JAR_PATH = 'jars/jt400.jar'  # Path to jt400.jar
-JDBC_URL = f"jdbc:as400://{DB_HOST}/{DB_NAME}"
-# JDBC driver class
-DRIVER_CLASS = "com.ibm.as400.access.AS400JDBCDriver"
-if not jpype.isJVMStarted():
-    jpype.startJVM(classpath=[JDBC_JAR_PATH])
+def navline_connection_setup():
 
-nav_conn = jaydebeapi.connect(
-        DRIVER_CLASS,
-        JDBC_URL,
-        [naviline_user, naviline_pass],
-        JDBC_JAR_PATH)
+    global nav_conn
+    #Naviline Query Setup
+    naviline_user = config['Credentials']['NAVILINE_USER']
+    naviline_pass = config['Credentials']['NAVILINE_PASSWORD']
+
+    os.environ['JAVA_HOME'] = config['Java']['SCRIPT_JAVA_HOME']
+    
+    db_host = config['Misc']['NAVILINE_HOST']             # e.g., myibmhost.example.com
+    db_name = config['Misc']['NAVILINE_DB']
+    jdbc_jar_path = config['Misc']['JDBC_JAR_PATH'] # Path to jt400.jar
+    jdbc_url = f"jdbc:as400://{db_host}/{db_name}"
+    # JDBC driver class
+    driver_class = "com.ibm.as400.access.AS400JDBCDriver"
+    if not jpype.isJVMStarted():
+        jpype.startJVM(classpath=[jdbc_jar_path])
+
+    nav_conn = jaydebeapi.connect(
+            driver_class,
+            jdbc_url,
+            [naviline_user, naviline_pass],
+            jdbc_jar_path)
+    print(f"Connected to {db_name} on {db_host}")
 
 
-BOX_CLIENT_ID = config['Credentials']['BOX_CLIENT_ID']
-BOX_CLIENT_SECRET = config['Credentials']['BOX_CLIENT_SECRET']
 
-
-# Choose ONE subject to authenticate as:
-BOX_SUBJECT_TYPE = "enterprise"     # "enterprise" to use the app's Service Account, or "user" to impersonate a managed user
-BOX_ENTERPRISE_ID = config['Credentials']['BOX_ENTERPRISE_ID']
-FILE_ID = config['Misc']['BOX_FILE_ID_METER_DATA']
 
 def safe_string_conversion(string):
     """
@@ -203,7 +202,7 @@ def load_naviline_data():
     try:
 
         curs = nav_conn.cursor()
-        print(f"Connected to {DB_NAME} on {DB_HOST}; running query from {naviline_query_file}")
+        print(f"running query from {naviline_query_file}")
         sql_query = read_sql_query(naviline_query_file)
         curs.execute(sql_query)
 
@@ -267,16 +266,23 @@ def transfer_sensus_data():
     Gets the current sensus meter file from box and transfers it to the local directory
     Param - None
     """
+    BOX_CLIENT_ID = config['Credentials']['BOX_CLIENT_ID']
+    BOX_CLIENT_SECRET = config['Credentials']['BOX_CLIENT_SECRET']
+    # Choose ONE subject to authenticate as:
+    BOX_SUBJECT_TYPE = "enterprise"     # "enterprise" to use the app's Service Account, or "user" to impersonate a managed user
+    BOX_ENTERPRISE_ID = config['Credentials']['BOX_ENTERPRISE_ID']
+    FILE_ID = config['Misc']['BOX_FILE_ID_METER_DATA']
+
     token_resp = requests.post(
     "https://api.box.com/oauth2/token",
-    data={
-        "grant_type": "client_credentials",
-        "client_id": BOX_CLIENT_ID,
-        "client_secret": BOX_CLIENT_SECRET,
-        "box_subject_type": BOX_SUBJECT_TYPE,     
-        "box_subject_id": BOX_ENTERPRISE_ID
-    },
-    timeout=30,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": BOX_CLIENT_ID,
+            "client_secret": BOX_CLIENT_SECRET,
+            "box_subject_type": BOX_SUBJECT_TYPE,     
+            "box_subject_id": BOX_ENTERPRISE_ID
+        },
+        timeout=30,
     )
     token_resp.raise_for_status()
     access_token = token_resp.json()["access_token"]
@@ -317,11 +323,11 @@ def load_esri_data():
     Param - None  
     Returns - A PETL dataview (view) with current ESRI data, with fields renamed to avoid collisions.
     """
-    meter_data = [row for row in arcpy.da.SearchCursor(meters_feature_server, fields)]
+    meter_data = [row for row in arcpy.da.SearchCursor(meters_feature_server, esri_meter_fields)]
 
     #meter_data = meter_data[:10]
 
-    meter_data_as_dicts = [dict(zip(fields, row)) for row in meter_data]
+    meter_data_as_dicts = [dict(zip(esri_meter_fields, row)) for row in meter_data]
     for row in meter_data_as_dicts:
         row["X"] = row["Shape"][0]
         row["Y"] = row["Shape"][1]
@@ -740,7 +746,7 @@ def insert_rows(esri_adds):
     # print("ADDING ROWS: " + str(row_list))
 
     # TODO: I couldn't get Append to work, this way is a little slower.
-    with arcpy.da.InsertCursor(meters_feature_server, fields) as iCur:
+    with arcpy.da.InsertCursor(meters_feature_server, esri_meter_fields) as iCur:
         for row in row_list:
             iCur.insertRow(row)
 
@@ -762,15 +768,15 @@ def update_rows(esri_updates):
     #print("--- Meter IDs: " + str(update_ids))
 
 
-    for i in range(0, len(rows_to_update), batch_size):
-        batch = rows_to_update[i:i+batch_size]
+    for i in range(0, len(rows_to_update), esri_batch_size):
+        batch = rows_to_update[i:i+esri_batch_size]
 
         nav_dict = {row["Naviline_Service_Id"]: row for row in batch}
 
-        print(f"--- Updating batch {i//batch_size + 1} of {len(rows_to_update) // batch_size + 1}")
+        print(f"--- Updating batch {i//esri_batch_size + 1} of {len(rows_to_update) // esri_batch_size + 1}")
 
         sql_query = "Naviline_Service_Id IN ({})".format(", ".join(["'{}'".format(key) for key in nav_dict.keys()]))
-        with arcpy.da.UpdateCursor(meters_feature_server, fields, sql_query) as uCur:
+        with arcpy.da.UpdateCursor(meters_feature_server, esri_meter_fields, sql_query) as uCur:
             for esri_row in uCur:
                 nav_row = nav_dict.get(esri_row[1])
                 if nav_row:
@@ -809,15 +815,15 @@ def remove_rows(esri_removes):
     """
     rows_to_remove = list(etl.dicts(esri_removes))
 
-    for i in range(0, len(rows_to_remove), batch_size):
-        batch = rows_to_remove[i:i+batch_size]
+    for i in range(0, len(rows_to_remove), esri_batch_size):
+        batch = rows_to_remove[i:i+esri_batch_size]
 
         nav_dict = {row["Naviline_Service_Id"]: row for row in batch}
 
-        print(f"--- Removing batch {i//batch_size + 1} of {len(rows_to_remove) // batch_size + 1}")
+        print(f"--- Removing batch {i//esri_batch_size + 1} of {len(rows_to_remove) // esri_batch_size + 1}")
 
         sql_query = "Naviline_Service_Id IN ({})".format(", ".join(["'{}'".format(key) for key in nav_dict.keys()]))
-        with arcpy.da.UpdateCursor(meters_feature_server, fields, sql_query) as uCur:
+        with arcpy.da.UpdateCursor(meters_feature_server, esri_meter_fields, sql_query) as uCur:
             for esri_row in uCur:
                 nav_row = nav_dict.get(esri_row[1])
                 if nav_row:
@@ -884,7 +890,14 @@ def main():
     global input_dm
     global input_esri
     global summary_file
+    global transformer
 
+
+
+
+
+    # Coordinate System
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:2264")  # WGS84 to NC State Plane (2264)
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Execute the integration for updating the Esri meter layer")
     parser.add_argument("-d","--dont_fetch", help="don't fetch data from remotes",action='store_true')
@@ -911,18 +924,25 @@ def main():
     initial_dm_load = None
     initial_esri_load = None
 
-    if (not(args.dont_fetch)):
-        initial_nv_load = load_naviline_data()
-        transfer_sensus_data()
-        initial_dm_load = load_sensus_data()
-        initial_esri_load = load_esri_data()
-    else:
+    #Only connect to esri if updating or fetching; don't connect only if not updating AND not fetching
+    if(not(args.noupdate) or not(args.dont_fetch)):
+        esri_connection_setup()
+
+
+    if (args.dont_fetch):
         if (not(os.path.exists(input_nv)) or not(os.path.exists(input_dm)) or not(os.path.exists(input_esri))):
             print("Missing Input Files. Please fetch data by removing the --dont_fetch flag or specifying a --folder with the data.")
             exit()
         initial_nv_load = load_naviline_data_from_file()
         initial_dm_load = load_sensus_data()
         initial_esri_load = load_esri_data_from_file()
+    else:
+        navline_connection_setup()
+        initial_nv_load = load_naviline_data()
+        transfer_sensus_data()
+        initial_dm_load = load_sensus_data()
+        initial_esri_load = load_esri_data()
+    
     
 
     naviline_joinable_data = clean_naviline_data(initial_nv_load)
@@ -951,9 +971,10 @@ def main():
     else:
         print("cowardly refusing to update esri")
     
-    nav_conn.close()
-    if jpype.isJVMStarted():
-        jpype.shutdownJVM()
+    if (not(args.dont_fetch)):
+        nav_conn.close()
+        if jpype.isJVMStarted():
+            jpype.shutdownJVM()
 
     cleanup_keep_latest(output_data_subdir,30)
 if __name__ == "__main__":

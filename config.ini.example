@@ -12,3 +12,6 @@ SCRIPT_JAVA_HOME = C:\\Program Files\\Zulu\\zulu-21 # Needed for jdbc (Naviline 
 
 [Misc]
 BOX_FILE_ID_METER_DATA = 1892911751365
+NAVILINE_HOST = cary.aspgov.com
+NAVILINE_DB = HTEDTA
+JDBC_JAR_PATH = jars/jt400.jar
