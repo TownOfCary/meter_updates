@@ -1,0 +1,14 @@
+[Credentials]
+ARCGIS_USER = arcusername
+ARCGIS_PASSWORD = arcpassword
+NAVILINE_USER = naviline_username
+NAVILINE_PASSWORD = naviline_password
+BOX_CLIENT_ID = Box Client ID
+BOX_CLIENT_SECRET = Box Client Secret
+BOX_ENTERPRISE_ID = 18227079
+
+[Java]
+SCRIPT_JAVA_HOME = C:\\Program Files\\Zulu\\zulu-21 # Needed for jdbc (Naviline pull)
+
+[Misc]
+BOX_FILE_ID_METER_DATA = 1892911751365
