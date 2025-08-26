@@ -155,7 +155,7 @@ FROM
                             UT220AP as service_inner
                     )
                 WHERE
-                    STATUS = 'A'
+                    STATUS IN ('A','T')
                     AND (
                         (
                             ServiceStartDate IS NOT NULL
