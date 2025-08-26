@@ -191,7 +191,9 @@ def convert_esri_to_proper_types(esri_load):
                                     'Esri_Status': safe_int_conversion,
                                     'Esri_Install_Date': safe_datetime_conversion,
                                     'Esri_created_date': safe_datetime_conversion,
-                                    'Esri_last_edited_date': safe_datetime_conversion})
+                                    'Esri_last_edited_date': safe_datetime_conversion,
+                                    'Esri_X': safe_float_conversion,
+                                    'Esri_Y': safe_float_conversion})
 def load_naviline_data():
     """
     Queries Naviline data and loads it into a petl struct 
@@ -325,6 +327,7 @@ def load_esri_data():
     """
     meter_data = [row for row in arcpy.da.SearchCursor(meters_feature_server, esri_meter_fields)]
 
+    #print(f"--- Loaded {len(meter_data)} rows from ESRI meters feature server ---")
     #meter_data = meter_data[:10]
 
     meter_data_as_dicts = [dict(zip(esri_meter_fields, row)) for row in meter_data]
