@@ -49,6 +49,7 @@ def navline_connection_setup():
     naviline_user = config['Credentials']['NAVILINE_USER']
     naviline_pass = config['Credentials']['NAVILINE_PASSWORD']
 
+    javaHome = config['Java']['SCRIPT_JAVA_HOME']
     os.environ['JAVA_HOME'] = config['Java']['SCRIPT_JAVA_HOME']
     
     db_host = config['Misc']['NAVILINE_HOST']             # e.g., myibmhost.example.com
@@ -220,13 +221,9 @@ def load_naviline_data():
         export_view_to_file(initial_nv_load, os.path.basename(os.path.splitext(input_nv)[0]))  # naviline file without the extension or folder
         curs.close()
 
-
     except Exception as e:
         print(f"Error: {e}")
 
-    
-    
-    
     return initial_nv_load
 
 # Load Naviline service point data
@@ -439,6 +436,18 @@ def remove_if_missing(view, field_names, source_name):
     return modified_view
 
 
+def get_if_missing(view, field_name, source_name):
+    '''
+    Returns any rows that have missing data in the field supplied by field_name. Creates a csv file(s) in
+    {workdir}/{bad_data_subdir}/missing_{field_name}\_in_{source_name}.csv containing rows with missing values.  
+    Param - view: (view) The original view to modify.  
+    Param - field_name: (string) the name of the field for which to check if missing.  
+    Param - source_name: (string) The name of the source (ex. Naviline, Sensus, etc) used in creation of the output file.  
+    Return - A new view (view) without missing values in the supplied fields.
+    '''
+    
+
+
 def clean_naviline_data(initial_nv_load):
     '''
     Cleans up naviline data by removing unnecessary, duplicate, or missing data.  
@@ -641,9 +650,15 @@ def get_esri_updates(left_join_nav_sensus, esri_joinable_data):
     # Otherwise, we are not changing the status with updates.
     matches_with_esri_status = etl.addfield(matches_with_esri,'New_Status',lambda rec: 0 if rec.Esri_Status == 2 else rec.Esri_Status)
 
-    # 13. Records requiring update in ESRI: compare all fields
+    # Records requiring update in ESRI: compare all fields
     matches_that_require_update = etl.select(etl.addfield(matches_with_esri_status,"Whats_Diff", whats_diff), lambda rec: rec.Whats_Diff != None)
-    
+
+    # Records requiring update in ESRI: missing locations
+    esri_with_missing_location = etl.select(esri_joinable_data, lambda rec: rec.Esri_X == None or rec.Esri_Y == None)
+    export_view_to_file(esri_with_missing_location, f"{bad_data_subdir}missing_location_in_esri_data")
+    # TODO: Figure out what to do with this view
+
+
     export_view_to_file(matches_that_require_update, f"{debug_data_subdir}records_that_require_update_in_Esri")
 
     prepped_updates = etl.rename(etl.cut(matches_that_require_update, 
@@ -886,6 +901,7 @@ def cleanup_keep_latest(base_path, keep=10):
     for folder_date, folder_path in to_delete:
         print(f"Deleting {folder_path} (date: {folder_date.date()})")
         rmtree(folder_path)
+
 def main():
     #declare globals
     global workdir
@@ -894,8 +910,6 @@ def main():
     global input_esri
     global summary_file
     global transformer
-
-
 
 
 
