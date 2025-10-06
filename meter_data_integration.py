@@ -40,6 +40,7 @@ def esri_connection_setup():
     arcpy.SignInToPortal("https://maps.carync.gov/portal/", arcgis_user, arcgis_pass)
     esri_meter_fields = [f.name for f in arcpy.ListFields(meters_feature_server)]
     esri_meter_fields.remove("GlobalID")
+    #pp.pprint(esri_meter_fields)
     esri_batch_size = 100  # Process 100 elements at a time
 
 def navline_connection_setup():
@@ -475,9 +476,11 @@ def clean_sensus_data(initial_dm_load):
     Param - initial_dm_load: (view) The initial view containing raw sensus data.  
     Return - A new view (view) with clean data.
     '''
-    
-    dm_load = etl.unpack(etl.convert(etl.addfields(initial_dm_load,[("XY",'')]),'XY', convert_lat_long_to_state_plane, pass_row=True),'XY',['X','Y'])
+    wonky_coordinates = etl.select(initial_dm_load, lambda rec: rec['SensusLatitude'] == None or rec['SensusLongitude'] == None or rec['SensusLatitude'] > 35.91 or rec['SensusLatitude'] < 35.63 or rec['SensusLongitude'] > -78.72 or rec['SensusLongitude'] < -78.97)
+    export_view_to_file(wonky_coordinates, f"{bad_data_subdir}data_suspect_coordinates_in_sensus")
 
+    dm_load = etl.unpack(etl.convert(etl.addfields(initial_dm_load,[("XY",'')]),'XY', convert_lat_long_to_state_plane, pass_row=True),'XY',['X','Y'])
+    
     dm_clean = remove_if_missing(dm_load, ["SensusRadioId", "SensusMeterNumber"], "Sensus")
     dm_clean = remove_if_duplicate(dm_clean, ["SensusRadioId", "SensusMeterNumber"], "Sensus")
 
@@ -629,12 +632,18 @@ def whats_diff(rec):
         nonmatches.append("Esri_Rate_Class")
     if rec.CUSTNAME != rec.Esri_Customer_Name:
         nonmatches.append("Esri_Customer_Name")
+    if (rec.X != None and rec.Y != None and rec.X != 0 and rec.Y != 0) and (rec.Esri_X == None or rec.Esri_Y == None or rec.Esri_X == 0 or rec.Esri_Y == 0):
+        nonmatches.append("Missing_Esri_Coordinates")
     if int(rec.New_Status) != int(rec.Esri_Status):
         nonmatches.append("Esri_Status")
     if (len(nonmatches) == 0):
         return None
     return ",".join(nonmatches)
 
+def need_new_coordinates(val,row) -> tuple:
+    if (row.X != None and row.Y != None and row.X != 0 and row.Y != 0) and (row.Esri_X == None or row.Esri_Y == None or row.Esri_X == 0 or row.Esri_Y == 0):
+        return row.X,row.Y
+    return None,None
 def get_esri_updates(left_join_nav_sensus, esri_joinable_data):
     '''
     Creates a view containing fields that need to be updated in Esri.  
@@ -653,11 +662,13 @@ def get_esri_updates(left_join_nav_sensus, esri_joinable_data):
     # Records requiring update in ESRI: compare all fields
     matches_that_require_update = etl.select(etl.addfield(matches_with_esri_status,"Whats_Diff", whats_diff), lambda rec: rec.Whats_Diff != None)
 
+    matches_that_require_update = etl.unpack(etl.convert(etl.addfields(matches_that_require_update,[("NEW_XY",'')]),'NEW_XY', need_new_coordinates, pass_row=True),'NEW_XY',['X_to_update','Y_to_update'])
     # Records requiring update in ESRI: missing locations
-    esri_with_missing_location = etl.select(esri_joinable_data, lambda rec: rec.Esri_X == None or rec.Esri_Y == None)
-    export_view_to_file(esri_with_missing_location, f"{bad_data_subdir}missing_location_in_esri_data")
+    #esri_with_missing_location = etl.select(esri_joinable_data, lambda rec: rec.Esri_X == None or rec.Esri_Y == None or rec.Esri_X == 0 or rec.Esri_Y == 0)
+    #export_view_to_file(esri_with_missing_location, f"{bad_data_subdir}missing_location_in_esri_data")
     # TODO: Figure out what to do with this view
 
+    #dm_load = etl.unpack(etl.convert(etl.addfields(initial_dm_load,[("XY",'')]),'XY', convert_lat_long_to_state_plane, pass_row=True),'XY',['X','Y'])
 
     export_view_to_file(matches_that_require_update, f"{debug_data_subdir}records_that_require_update_in_Esri")
 
@@ -680,7 +691,9 @@ def get_esri_updates(left_join_nav_sensus, esri_joinable_data):
                                         'RATE_CLASS',
                                         'CUSTNAME',
                                         'Esri_OBJECTID',
-                                        'New_Status'),{
+                                        'New_Status',
+                                        'X_to_update',
+                                        'Y_to_update'),{
                                                 'NAVILINE_SERVICE_ID':'Naviline_Service_Id',
                                                 'METERNUMBER':'Meter_Number',
                                                 'LOCATIONID':'Location_Id',
@@ -698,7 +711,9 @@ def get_esri_updates(left_join_nav_sensus, esri_joinable_data):
                                                 'RATE_CLASS':'Rate_Class',
                                                 'CUSTNAME':'Customer_Name',
                                                 'Esri_OBJECTID':'OBJECTID',
-                                                'New_Status':'Status'
+                                                'New_Status':'Status',
+                                                'X_to_update':'X',
+                                                'Y_to_update':'Y'
                                             })
 
     export_view_to_file(prepped_updates, f"{output_data_subdir}updates_for_esri")
@@ -814,7 +829,8 @@ def update_rows(esri_updates):
                     esri_row[15] = nav_row["Register"]
                     esri_row[16] = nav_row["Radio_Id"]
                     esri_row[21] = nav_row["Status"]
-
+                    if nav_row["X"] != None and nav_row["Y"] != None and nav_row["X"] != 0 and nav_row["Y"] != 0:
+                        esri_row[22] = arcpy.Point(nav_row["X"], nav_row["Y"])
                     try:
                         #print("UPDATING ROW: " + str(esri_row))
                         uCur.updateRow(esri_row)
