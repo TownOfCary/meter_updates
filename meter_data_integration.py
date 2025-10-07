@@ -25,7 +25,7 @@ naviline_query_file = 'sql/Meter_Query_for_esri.sql'
 
 # Set up arcgis connection
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read('configs/config.ini')
 
 def esri_connection_setup():
     global meters_feature_server
