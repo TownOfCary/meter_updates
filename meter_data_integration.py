@@ -99,7 +99,8 @@ def safe_datetime_conversion(string):
     formats = [
         "%Y-%m-%d",
         "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M:%S.%f"
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y%m%d%H%M%S"
     ]
     if (string == None or string == ""): return None
         
@@ -167,6 +168,7 @@ def convert_dm_to_proper_types(dm_load):
     return etl.convert(dm_load, 
                                   { 'SensusRadioId': safe_string_conversion,
                                    'SensusMeterNumber': safe_string_conversion,
+                                   'SensusDateOfInstallation': safe_datetime_conversion,
                                    'SensusLatitude': safe_float_conversion, 
                                    'SensusLongitude': safe_float_conversion}
                                 )
@@ -309,7 +311,7 @@ def load_sensus_data():
     Param - None  
     Returns - A PETL dataview (view) with sensus data from a CSV file.
     """
-    initial_dm_load = etl.cut(etl.fromcsv(input_dm,header=['RecordType','RecordVersion','SenderID','SenderCustomerID','SensusRadioId','SensusMeterNumber','TimeStamp','RecordId','OperationType','Purpose','Comment','Commodity','Activity','EquipmentType','Manufacturer','Model','SensusOtherMeterNumber','Identifier','DateOfPurchase','SensusDateOfInstallation','Owner','Count','Field1','Value1','Field2','Value2','Field3','Value3','Field4','SensusLatitude','Field5','SensusLongitude','Field6','Value6','Field7','Value7','Field8','Value8','Field9','Value9']),'SensusRadioId','SensusMeterNumber','SensusLongitude','SensusLatitude')
+    initial_dm_load = etl.rename(etl.cut(etl.fromcsv(input_dm,header=['RecordType','RecordVersion','SenderID','SenderCustomerID','SensusRadioId','SensusMeterNumber','TimeStamp','RecordId','OperationType','Purpose','Comment','Commodity','Activity','EquipmentType','Manufacturer','Model','SensusOtherMeterNumber','Identifier','DateOfPurchase','SensusDateOfInstallation','Owner','Count','Field1','Value1','Field2','Value2','Field3','Value3','Field4','SensusLatitude','Field5','SensusLongitude','Field6','Value6','Field7','Value7','Field8','Value8','Field9','Value9']),'SensusRadioId','SensusMeterNumber','Value3','SensusLongitude','SensusLatitude'),{'Value3':'SensusDateOfInstallation'})
 
     # reading a csv, everything comes in as a string.  Anything that is not a string should be converted (int, date), if those values are blank, the should be converted to None
     initial_dm_load = convert_dm_to_proper_types(initial_dm_load)
@@ -429,8 +431,8 @@ def remove_if_missing(view, field_names, source_name):
     modified_view = view
     for field_name in field_names:
         # 4. Identify duplicates
-        view_with_missing = etl.select(view, lambda rec: rec[field_name] == '')
-        modified_view = etl.select(modified_view, lambda rec: rec[field_name] != '')
+        view_with_missing = etl.select(view, lambda rec: rec[field_name] == '' or rec[field_name] == None)
+        modified_view = etl.select(modified_view, lambda rec: rec[field_name] != '' and rec[field_name] != None)
 
         export_view_to_file(view_with_missing, f"{bad_data_subdir}missing_{field_name}_in_{source_name}")
 
