@@ -941,7 +941,11 @@ def main():
     args = parser.parse_args()
 
     # Define working directory and file paths
-    workdir = 'output/' + date.today().strftime("%Y%m%d") + '/'
+    # workdir is set based on the following prioirity: command line (-f), config file (Misc->OUTPUT_DIR), default (./output/)
+    output_base = 'output/'
+    if ('OUTPUT_DIR' in config['Misc'] and config['Misc']['OUTPUT_DIR']):
+        output_base = config['Misc']['OUTPUT_DIR']
+    workdir = output_base + '/' + date.today().strftime("%Y%m%d") + '/'
     if (args.folder):
         workdir = args.folder
 

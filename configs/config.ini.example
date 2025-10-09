@@ -15,3 +15,4 @@ BOX_FILE_ID_METER_DATA = 1892911751365
 NAVILINE_HOST = Naviline host Name
 NAVILINE_DB = Naviline Library
 JDBC_JAR_PATH = jars/jt400.jar
+OUTPUT_DIR = Directory to output
