@@ -13,6 +13,7 @@ import jaydebeapi                     # Used to connect to Naviline DB
 import jpype                          # Used for interactive java calls (so we can use jaydebeapi)
 from datetime import date             # Get current date for file naming
 from datetime import datetime         # for strptime 
+from arcgis import GIS
 
 
 pp = pprint.PrettyPrinter(indent=4)
@@ -36,6 +37,8 @@ def esri_connection_setup():
     arcgis_user = config['Credentials']['ARCGIS_USER']
     arcgis_pass = config['Credentials']['ARCGIS_PASSWORD']
 
+    # # Connect to GIS
+    
     meters_feature_server = "https://maps-apis.carync.gov/server/rest/services/Infrastructure/MetersInternal/FeatureServer/0" # service url
     arcpy.SignInToPortal("https://maps.carync.gov/portal/", arcgis_user, arcgis_pass)
     esri_meter_fields = [f.name for f in arcpy.ListFields(meters_feature_server)]
@@ -1015,7 +1018,7 @@ def main():
         if jpype.isJVMStarted():
             jpype.shutdownJVM()
 
-    cleanup_keep_latest(output_data_subdir,30)
+    cleanup_keep_latest(output_base,30)
 if __name__ == "__main__":
     main()
 
