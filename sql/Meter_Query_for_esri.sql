@@ -10,11 +10,6 @@ FROM
             TRIM(UT550AP.UTSVC) as ServiceType,
             TRIM(UT550AP.UTMSZC) as Meter_Size,
             UT550AP.UTSSEQ as SEQNUMB,
-            /* TRIM(LMABREP.ABABTX) as StrNum,
-            TRIM(LMABREP.ABCHCD) as StrDir,
-            TRIM(LMABREP.ABACCD) as StreetName,
-            TRIM(LMABREP.ABAECD) as StrSuff,
-            TRIM(LMABREP.ABDFCD) as AptNum, */
             STRIP(
                 (
                     CASE
@@ -49,7 +44,7 @@ FROM
                 )
             ) AS ADDRESS,
             TRIM(UT100AP.UTCYCN) AS CycleNumb,
-            /* TRIM(UT100AP.UTRTEN) AS RteNumb, */
+
 	    CASE
                 WHEN UT550AP.UTINMM > 0
                 AND UT550AP.UTINMM <= 12
@@ -63,7 +58,6 @@ FROM
             TRIM(registers.UTADID) as Register, 
             TRIM(UT100AP.UTJUR) AS Jurisdiction,
             TRIM(UT100AP.UTCLAS) AS Rate_Class,
-            /* Services.CID as CID, */
             STRIP(UT200AP.UTCSNM) as CustName,
             'XXXXX' || RIGHT(TRIM(UT550AP.UTMTR),5) as MaskedMeterNumb
         FROM
