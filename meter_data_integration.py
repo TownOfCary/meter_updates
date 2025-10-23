@@ -23,6 +23,7 @@ bad_data_subdir = 'bad_data/'
 debug_data_subdir = 'debug/'
 output_data_subdir = 'output/'
 naviline_query_file = 'sql/Meter_Query_for_esri.sql'
+naviline_inventory_query_file = 'sql/complete_meter_inventory.sql'
 
 # Set up arcgis connection
 config = configparser.ConfigParser()
@@ -166,6 +167,32 @@ def convert_naviline_to_proper_types(nv_load):
                                       'MASKEDMETERNUMB': safe_string_conversion
                                     }
                                 )
+def convert_nv_inventory_to_proper_types(nv_load):
+    return etl.convert(nv_load, 
+                                  {
+                                      'METERNUMBER': safe_string_conversion,
+                                      'CUSTOMERID': safe_int_conversion,
+                                      'LOCATIONID': safe_int_conversion,
+                                      'SERVICETYPE': safe_string_conversion,
+                                      'NAVILINE_SERVICE_ID': safe_string_conversion,
+                                      'METER_STATUS': safe_string_conversion,
+                                      'METER_SERVICE': safe_string_conversion,
+                                      'SEQNUMB': safe_int_conversion,
+                                      'METER_SIZE': safe_string_conversion,
+                                      'MULTIPLIER': safe_float_conversion,
+                                      'METER_MAKE': safe_string_conversion,
+                                      'METER_STYLE': safe_string_conversion,
+                                      'WAREHOUSE_CODE': safe_string_conversion,
+                                      'INSTALLDATE': safe_datetime_conversion,
+                                      'MANUFACTURE_DATE': safe_datetime_conversion,
+                                      'PURCHASE_DATE': safe_datetime_conversion,
+                                      'RADIO': safe_string_conversion,
+                                      'REGISTER': safe_string_conversion,
+                                      'LAST_INSTALL_EVENT_DATE': safe_datetime_conversion,
+                                      'LAST_INSTALL_EVENT_TYPE': safe_string_conversion,
+                                      'DATA_ISSUE_TYPE': safe_string_conversion
+                                    }
+                                )
 
 def convert_dm_to_proper_types(dm_load):
     return etl.convert(dm_load, 
@@ -201,18 +228,14 @@ def convert_esri_to_proper_types(esri_load):
                                     'Esri_last_edited_date': safe_datetime_conversion,
                                     'Esri_X': safe_float_conversion,
                                     'Esri_Y': safe_float_conversion})
-def load_naviline_data():
-    """
-    Queries Naviline data and loads it into a petl struct 
-    Param - None  
-    Returns - None
-    """
-    initial_nv_load = None
+
+def query_naviline_data(query_file):
+    data_out = None
     try:
 
         curs = nav_conn.cursor()
-        print(f"running query from {naviline_query_file}")
-        sql_query = read_sql_query(naviline_query_file)
+        print(f"running query from {query_file}")
+        sql_query = read_sql_query(query_file)
         curs.execute(sql_query)
 
         # Get column names
@@ -222,15 +245,30 @@ def load_naviline_data():
         results = curs.fetchall()
 
         naviline_data_as_dicts = [dict(zip(column_names, row)) for row in results]
-        initial_nv_load = etl.fromdicts(naviline_data_as_dicts)
-        initial_nv_load =convert_naviline_to_proper_types(initial_nv_load)
-        export_view_to_file(initial_nv_load, os.path.basename(os.path.splitext(input_nv)[0]))  # naviline file without the extension or folder
+        data_out = etl.fromdicts(naviline_data_as_dicts)
         curs.close()
-
+        
     except Exception as e:
         print(f"Error: {e}")
-
+        exit()
+    return data_out
+    
+def load_naviline_data():
+    """
+    Queries Naviline data and loads it into a petl struct 
+    Param - None  
+    Returns - None
+    """
+    initial_nv_load = query_naviline_data(naviline_query_file)
+    initial_nv_load = convert_naviline_to_proper_types(initial_nv_load)
+    export_view_to_file(initial_nv_load, os.path.basename(os.path.splitext(input_nv)[0]))  # naviline file without the extension or folder
     return initial_nv_load
+
+def load_naviline_inventory():
+    nv_inventory_load = query_naviline_data(naviline_inventory_query_file)
+    nv_inventory_load = convert_nv_inventory_to_proper_types(nv_inventory_load)
+    export_view_to_file(nv_inventory_load, os.path.basename(os.path.splitext(input_nv_inventory)[0]))
+    return nv_inventory_load
 
 # Load Naviline service point data
 def load_naviline_data_from_file():
@@ -241,30 +279,16 @@ def load_naviline_data_from_file():
     """
     initial_nv_load = etl.fromcsv(input_nv,errors='ignore') # headers=['NAVILINE_SERVICE_ID','METERNUMBER','LOCATIONID','LOCATION_ON_PROPERTY','SERVICETYPE','METER_SIZE','SEQNUMB','ADDRESS','CYCLENUMB','INSTALLDATE','CYCLEROUTE','METER_MAKE','RADIO','REGISTER','JURISDICTION','RATE_CLASS','CUSTNAME','MASKEDMETERNUMB']
     # reading a csv, everything comes in as a string.  Anything that is not a string should be converted (int, date), if those values are blank, the should be converted to None
-    initial_nv_load = etl.convert(initial_nv_load, 
-                                  {
-                                      'NAVILINE_SERVICE_ID': safe_string_conversion,
-                                      'METERNUMBER': safe_string_conversion,
-                                      'LOCATIONID': safe_int_conversion,
-                                      'LOCATION_ON_PROPERTY': safe_string_conversion,
-                                      'SERVICETYPE': safe_string_conversion,
-                                      'METER_SIZE': safe_string_conversion,
-                                      'SEQNUMB': safe_int_conversion,
-                                      'ADDRESS': safe_string_conversion,
-                                      'CYCLENUMB': safe_int_conversion,
-                                      'INSTALLDATE': safe_datetime_conversion,
-                                      'CYCLEROUTE': safe_string_conversion,
-                                      'METER_MAKE': safe_string_conversion,
-                                      'RADIO': safe_string_conversion,
-                                      'REGISTER': safe_string_conversion,
-                                      'JURISDICTION': safe_string_conversion,
-                                      'RATE_CLASS': safe_string_conversion,
-                                      'CUSTNAME': safe_string_conversion,
-                                      'MASKEDMETERNUMB': safe_string_conversion
-                                    })
+
     initial_nv_load =convert_naviline_to_proper_types(initial_nv_load)
     stat_output(f"Number of rows in initial nv load: {etl.nrows(initial_nv_load)}")
     return initial_nv_load
+
+def load_naviline_inventory_from_file():
+    nv_inventory_load = etl.fromcsv(input_nv_inventory,errors='ignore')
+    nv_inventory_load = convert_nv_inventory_to_proper_types(nv_inventory_load)
+    stat_output(f"Number of rows in initial nv inventory load: {etl.nrows(nv_inventory_load)}")
+    return nv_inventory_load
 
 def transfer_sensus_data():
     """
@@ -506,6 +530,42 @@ def clean_esri_data(initial_esri_load):
     stat_output(f"Number of joinable records in Esri: {etl.nrows(esri_clean)}")
 
     return esri_clean
+
+def categorize_meter_inventory(initial_inventory_load):
+    purged_in_warehouse = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'PURGED/ACTIVE_WAREHOUSE')
+    export_view_to_file(purged_in_warehouse, f"{bad_data_subdir}inventory_purged_meters_with_active_warehouse")
+    
+    purged_installed = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'PURGED/INSTALLED')
+    export_view_to_file(purged_installed, f"{bad_data_subdir}inventory_purged_meters_installed")
+
+    active_in_inactive_warehouse = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'ACTIVE/INACTIVE_WAREHOUSE')
+    export_view_to_file(active_in_inactive_warehouse, f"{bad_data_subdir}inventory_active_meters_in_inactive_warehouse")
+
+    installed_and_warehouse = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'ACTIVE/INSTALLED/WAREHOUSE')
+    export_view_to_file(installed_and_warehouse, f"{bad_data_subdir}inventory_installed_meters_in_warehouse")
+
+    not_installed_no_warehouse = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'NOT_INSTALLED/NO_WAREHOUSE')
+    export_view_to_file(not_installed_no_warehouse, f"{bad_data_subdir}inventory_not_installed_no_warehouse")
+
+    audit_meters = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'AUDIT_METER')
+    export_view_to_file(audit_meters, f"{bad_data_subdir}inventory_audit_meters")
+
+    installed = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'CLEAN-ACTIVE/INSTALLED')
+    export_view_to_file(installed, f"{debug_data_subdir}inventory_installed_meters")
+
+    reusable = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'CLEAN-ACTIVE/USED_INVENTORY')
+    export_view_to_file(reusable, f"{debug_data_subdir}inventory_used_meters")
+
+    trashed = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'CLEAN-PURGED/SCRAPPED_INVENTORY')
+    export_view_to_file(trashed, f"{debug_data_subdir}inventory_discarded_meters")
+
+    new_meters = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'CLEAN-ACTIVE/NEW_INVENTORY')
+    export_view_to_file(new_meters, f"{debug_data_subdir}inventory_new_meters")
+    
+    unknown = etl.select(initial_inventory_load, lambda rec: rec['DATA_ISSUE_TYPE'] == 'UNKNOWN')
+    export_view_to_file(unknown, f"{debug_data_subdir}inventory_uncategorized")
+
+
 
 
 def join_naviline_and_sensus(init_nav, clean_nav, sensus_view):
@@ -927,6 +987,7 @@ def main():
     #declare globals
     global workdir
     global input_nv
+    global input_nv_inventory
     global input_dm
     global input_esri
     global summary_file
@@ -955,6 +1016,7 @@ def main():
     os.makedirs(workdir, exist_ok=True)
     #input files
     input_nv = workdir + 'initial_naviline_load.csv'
+    input_nv_inventory = workdir + 'initial_naviline_inventory_load.csv'
     input_dm = workdir + 'initial_sensus_load.csv'
     input_esri = workdir + 'initial_esri_load.csv'
 
@@ -976,11 +1038,13 @@ def main():
             print("Missing Input Files. Please fetch data by removing the --dont_fetch flag or specifying a --folder with the data.")
             exit()
         initial_nv_load = load_naviline_data_from_file()
+        initial_nv_inventory_load = load_naviline_inventory_from_file()
         initial_dm_load = load_sensus_data()
         initial_esri_load = load_esri_data_from_file()
     else:
         navline_connection_setup()
         initial_nv_load = load_naviline_data()
+        initial_nv_inventory_load = load_naviline_inventory()
         transfer_sensus_data()
         initial_dm_load = load_sensus_data()
         initial_esri_load = load_esri_data()
@@ -990,7 +1054,7 @@ def main():
     naviline_joinable_data = clean_naviline_data(initial_nv_load)
     sensus_joinable_data = clean_sensus_data(initial_dm_load)
     esri_joinable_data = clean_esri_data(initial_esri_load)
-
+    categorize_meter_inventory(initial_nv_inventory_load)
     # Special transformation to ensure there are no duplicate Naviline_Service_Ids.
     initial_nv_load = etl.distinct(initial_nv_load, "NAVILINE_SERVICE_ID")
 
